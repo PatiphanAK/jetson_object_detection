@@ -1,1 +1,2 @@
+./dependencies/pyds-1.1.1-py3-none-linux_aarch64.whl
 ./dependencies/onnxruntime_gpu-1.11.0-cp36-cp36m-linux_aarch64.whl
