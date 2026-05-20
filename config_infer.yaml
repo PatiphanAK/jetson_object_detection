@@ -1,0 +1,13 @@
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+model-engine-file=yolov8n_b5.engine
+labelfile-path=coco.labels
+custom-lib-path=libnvdsinfer_custom_impl_Yolo.so
+parse-bbox-func-name=NvDsInferParseYolo
+num-detected-classes=80
+batch-size=5
+network-mode=2              ; FP16
+process-mode=1
+model-color-format=0        ; RGB
+cluster-mode=4              ; NMS built-in

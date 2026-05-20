@@ -1,0 +1,41 @@
+# DeepStream nvinfer config for YOLOv8n (5-stream batched, FP16, Jetson Nano)
+# Based on DeepStream-Yolo template (marcoslucianops/DeepStream-Yolo)
+#
+# Notes:
+#  - model-engine-file points to a batch=5 engine built by build_batch.py.
+#    If you only have the original batch=1 engine, change to yolov8n.engine
+#    and set batch-size=1 (will be slow with 5 streams).
+#  - net-scale-factor 1/255 = 0.00392156
+#  - model-color-format=0 → RGB (YOLOv8 default)
+#  - network-mode=2 → FP16 (matches engine built by build.py / build_batch.py)
+#  - maintain-aspect-ratio + symmetric-padding → letterbox 114-gray, same as Python preprocess
+#  - cluster-mode=2 → no DBSCAN/group, use NMS only (parse_bbox handles it)
+#  - parse-bbox-func-name + custom-lib-path → DeepStream-Yolo's NvDsInferParseYolo
+#  - engine-create-func-name → if engine missing, build from ONNX automatically
+
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+model-color-format=0
+onnx-file=yolov8n.onnx
+model-engine-file=yolov8n_b5.engine
+labelfile-path=labels.txt
+batch-size=5
+network-mode=2
+num-detected-classes=80
+interval=0
+gie-unique-id=1
+process-mode=1
+network-type=0
+cluster-mode=2
+maintain-aspect-ratio=1
+symmetric-padding=1
+#workspace-size=2000
+parse-bbox-func-name=NvDsInferParseYolo
+custom-lib-path=/home/pang-1/dev/libnvdsinfer_custom_impl_Yolo.so
+engine-create-func-name=NvDsInferYoloCudaEngineGet
+
+[class-attrs-all]
+nms-iou-threshold=0.45
+pre-cluster-threshold=0.25
+topk=300
