@@ -1,0 +1,3 @@
+appdirs>=1.4.0
+mako
+pytools>=2011.2
