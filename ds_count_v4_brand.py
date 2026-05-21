@@ -69,7 +69,7 @@ def load_runtime_config(path):
         "sources": sources,
         "infer_config": app.get("infer-config", path),
         "log_csv": app.get("log-csv", "v4_brandy.log"),
-        "brand_engine": app.get("brand-engine", "shufflenet_brand.engine"),
+        "brand_engine": app.get("brand-engine", "model/classy.engine"),
         "conf_threshold": app.getfloat("conf-threshold", fallback=0.25),
         "car_class_id": app.getint("car-class-id", fallback=2),
         "brand_max_batch": app.getint("brand-max-batch", fallback=16),
