@@ -38,16 +38,16 @@ import pyds
 
 # ── Config ──────────────────────────────────────────────────────────
 SOURCES = {
-    "cam-a": "rtsp://172.16.30.111:8554/vdo1",
-    "cam-b": "rtsp://172.16.30.111:8554/vdo2",
-    "cam-c": "rtsp://172.16.30.111:8554/vdo3",
-    "cam-d": "rtsp://172.16.30.111:8554/vdo4",
-    "cam-e": "rtsp://172.16.30.111:8554/vdo5",
+    "CCTV01": "rtsp://172.16.30.111:8554/vdo1",
+    "CCTV03": "rtsp://172.16.30.111:8554/vdo2",
+    "CCTV04": "rtsp://172.16.30.111:8554/vdo3",
+    "CCTV07": "rtsp://172.16.30.111:8554/vdo4",
+    "CCTV08": "rtsp://172.16.30.111:8554/vdo5",
 }
 
 INFER_CONFIG  = "config_infer_yolo26.txt"
 BRAND_ENGINE  = "shufflenet_brand.engine"
-TRACKER_CFG   = "/opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml"
+TRACKER_CFG   = "/home/pang-1/dev/config_tracker_IOU_local.yml"
 TRACKER_LIB   = "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so"
 LOG_CSV       = "detect_log_v6_track.csv"
 
@@ -55,7 +55,7 @@ CONF_THRESHOLD       = 0.25
 CAR_CLASS_ID         = 2
 BRAND_MAX_BATCH      = 16
 
-MUXER_W, MUXER_H         = 320, 320    # will switch to 320 once smaller engine is ready
+MUXER_W, MUXER_H         = 640, 640
 TILER_W, TILER_H         = 1280, 720
 BATCHED_PUSH_TIMEOUT_US  = 40_000
 
@@ -184,7 +184,7 @@ def set_color(c, rgb):
     c.red, c.green, c.blue, c.alpha = rgb[0], rgb[1], rgb[2], 1.0
 
 
-def attach_obj_meta(batch_meta, frame_meta, x1, y1, x2, y2, label, cid):
+def attach_obj_meta(batch_meta, frame_meta, x1, y1, x2, y2, label, cid, conf=0.0):
     """
     Attach object meta in MUXER (source-frame) coordinates.
     Tiler/OSD will rescale to display correctly because we DON'T pre-scale.
@@ -192,7 +192,8 @@ def attach_obj_meta(batch_meta, frame_meta, x1, y1, x2, y2, label, cid):
     obj = pyds.nvds_acquire_obj_meta_from_pool(batch_meta)
     obj.unique_component_id = 1
     obj.class_id = cid
-    obj.confidence = 0.0
+    obj.confidence = float(conf)
+    obj.tracker_confidence = float(conf)
     obj.object_id = 0xffffffffffffffff   # tracker will assign real id
 
     rx = float(x1); ry = float(y1)
@@ -251,6 +252,8 @@ def attach_overlay_text(batch_meta, frame_meta, lines):
 
 
 # ── probe 1: nvinfer src pad ────────────────────────────────────────
+_p1_count = [0]
+_p1_dets = [0]
 def probe1_after_infer(pad, info, u_data):
     """
     Decode YOLO tensor and attach NvDsObjectMeta with simple bbox + label.
@@ -260,6 +263,9 @@ def probe1_after_infer(pad, info, u_data):
     if not gst_buffer: return Gst.PadProbeReturn.OK
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
     if batch_meta is None: return Gst.PadProbeReturn.OK
+    _p1_count[0] += 1
+    if _p1_count[0] % 50 == 0:
+        print(f"[DBG-P1] batches={_p1_count[0]} total_dets_attached={_p1_dets[0]}")
 
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
@@ -293,16 +299,41 @@ def probe1_after_infer(pad, info, u_data):
                 cname = COCO_CLASSES[cid] if 0 <= cid < len(COCO_CLASSES) else f"cls-{cid}"
                 attach_obj_meta(batch_meta, frame_meta,
                                 x1, y1, x2, y2,
-                                f"{cname} {score:.2f}", cid)
+                                f"{cname} {score:.2f}", cid, float(score))
                 total_counts[cname] += 1
+                _p1_dets[0] += 1
 
         try: l_frame = l_frame.next
         except StopIteration: break
 
+    # Diag: count obj_meta in this batch at end of probe1
+    if _p1_count[0]%50==0:
+        tot=0; lf=batch_meta.frame_meta_list
+        while lf is not None:
+            try: fm=pyds.NvDsFrameMeta.cast(lf.data)
+            except StopIteration: break
+            lo=fm.obj_meta_list; c=0
+            while lo is not None:
+                c+=1
+                try: lo=lo.next
+                except StopIteration: break
+            tot+=c
+            try: lf=lf.next
+            except StopIteration: break
+        nfm = 0; lf=batch_meta.frame_meta_list
+        while lf is not None:
+            try: fm=pyds.NvDsFrameMeta.cast(lf.data)
+            except StopIteration: break
+            nfm += fm.num_obj_meta
+            try: lf=lf.next
+            except StopIteration: break
+        print(f"[DBG-P1-END] batches={_p1_count[0]} via_list={tot} via_num_obj_meta={nfm}")
     return Gst.PadProbeReturn.OK
 
 
 # ── probe 2: tracker src pad ────────────────────────────────────────
+_p2_count = [0]
+_p2_objs = [0]
 def probe2_after_tracker(pad, info, u_data):
     """
     Walk tracked objects, classify brands for new car tracks, update labels,
@@ -313,6 +344,9 @@ def probe2_after_tracker(pad, info, u_data):
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
     if batch_meta is None: return Gst.PadProbeReturn.OK
 
+    _p2_count[0] += 1
+    if _p2_count[0] % 50 == 0:
+        print(f"[DBG-P2] batches={_p2_count[0]} total_objs_seen={_p2_objs[0]} brand_cache={len(brand_cache)}")
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     l_frame = batch_meta.frame_meta_list
 
@@ -338,6 +372,7 @@ def probe2_after_tracker(pad, info, u_data):
                 obj = pyds.NvDsObjectMeta.cast(l_obj.data)
             except StopIteration:
                 break
+            _p2_objs[0] += 1
             cid = obj.class_id
             tid = obj.object_id
             score = obj.confidence  # 0 if we set 0; ok
@@ -468,14 +503,22 @@ def _set_show(idx):
 def on_bus_message(bus, message, loop):
     t = message.type
     if t == Gst.MessageType.EOS:
+        print('[BUS] EOS')
         loop.quit()
     elif t == Gst.MessageType.ERROR:
         err, dbg = message.parse_error()
-        print(f"[BUS][ERR] {err.message}")
+        src = message.src.get_name() if message.src else '?'
+        print(f'[BUS][ERR] {src}: {err.message}')
+        if dbg: print(f'  debug: {dbg}')
         loop.quit()
     elif t == Gst.MessageType.WARNING:
         err, dbg = message.parse_warning()
-        print(f"[BUS][WARN] {err.message}")
+        src = message.src.get_name() if message.src else '?'
+        print(f'[BUS][WARN] {src}: {err.message}')
+    elif t == Gst.MessageType.STATE_CHANGED:
+        if message.src and message.src.get_name() == 'pipeline':
+            old, new, _ = message.parse_state_changed()
+            print(f'[BUS] pipeline: {old.value_nick} -> {new.value_nick}')
     return True
 
 
@@ -517,11 +560,7 @@ def build_pipeline():
         src.connect("pad-added", on_pad_added)
         pipe.add(src)
 
-    nvvconv = make("nvvideoconvert", "nvvconv-pre")
-    capsf   = make("capsfilter", "capsf-pre")
-    capsf.set_property("caps", Gst.Caps.from_string(
-        "video/x-raw(memory:NVMM), format=RGBA"))
-    pipe.add(nvvconv); pipe.add(capsf)
+    # NV12 from mux straight to nvinfer; convert to RGBA *after* tracker
 
     nvinfer = make("nvinfer", "nvinfer")
     nvinfer.set_property("config-file-path", INFER_CONFIG)
@@ -535,6 +574,12 @@ def build_pipeline():
     tracker.set_property("ll-config-file", TRACKER_CFG)
     tracker.set_property("enable-batch-process", 1)
     pipe.add(tracker)
+
+    nvvconv_post = make("nvvideoconvert", "nvvconv-post")
+    capsf_post   = make("capsfilter", "capsf-post")
+    capsf_post.set_property("caps", Gst.Caps.from_string(
+        "video/x-raw(memory:NVMM), format=RGBA"))
+    pipe.add(nvvconv_post); pipe.add(capsf_post)
 
     tiler = make("nvmultistreamtiler", "tiler")
     tiler.set_property("rows", 1); tiler.set_property("columns", 1)
@@ -551,11 +596,11 @@ def build_pipeline():
     pipe.add(transform); pipe.add(sink)
 
     for a, b, name in [
-        (streammux, nvvconv, "mux->nvvconv"),
-        (nvvconv, capsf, "nvvconv->caps"),
-        (capsf, nvinfer, "caps->nvinfer"),
+        (streammux, nvinfer, "mux->nvinfer"),
         (nvinfer, tracker, "nvinfer->tracker"),
-        (tracker, tiler, "tracker->tiler"),
+        (tracker, nvvconv_post, "tracker->nvvconv"),
+        (nvvconv_post, capsf_post, "nvvconv->caps"),
+        (capsf_post, tiler, "caps->tiler"),
         (tiler, osd, "tiler->osd"),
         (osd, transform, "osd->transform"),
         (transform, sink, "transform->sink"),
@@ -565,8 +610,32 @@ def build_pipeline():
 
     nvinfer.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER,
                                             probe1_after_infer, 0)
-    tracker.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER,
-                                            probe2_after_tracker, 0)
+    capsf_post.get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER,
+                                               probe2_after_tracker, 0)
+    _diag = [0]
+    def trk_sink_probe(pad, info, ud):
+        gb = info.get_buffer()
+        if not gb: return Gst.PadProbeReturn.OK
+        bm = pyds.gst_buffer_get_nvds_batch_meta(hash(gb))
+        if bm is None: return Gst.PadProbeReturn.OK
+        _diag[0]+=1
+        if _diag[0]%50==0:
+            tot=0; lf=bm.frame_meta_list
+            while lf is not None:
+                try: fm=pyds.NvDsFrameMeta.cast(lf.data)
+                except StopIteration: break
+                lo=fm.obj_meta_list; c=0
+                while lo is not None:
+                    c+=1
+                    try: lo=lo.next
+                    except StopIteration: break
+                tot+=c
+                try: lf=lf.next
+                except StopIteration: break
+            print(f"[DBG-TRK-SINK] batches={_diag[0]} obj_at_sink={tot}")
+        return Gst.PadProbeReturn.OK
+    tracker.get_static_pad("sink").add_probe(Gst.PadProbeType.BUFFER, trk_sink_probe, 0)
+
     return pipe, tiler
 
 

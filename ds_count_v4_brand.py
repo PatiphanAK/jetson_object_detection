@@ -40,15 +40,12 @@ import pyds
 
 # ── Config ──────────────────────────────────────────────────────────
 SOURCES = {
-    "cam-a": "rtsp://172.16.30.111:8554/vdo1",
-    "cam-b": "rtsp://172.16.30.111:8554/vdo2",
-    "cam-c": "rtsp://172.16.30.111:8554/vdo3",
-    "cam-d": "rtsp://172.16.30.111:8554/vdo4",
-    "cam-e": "rtsp://172.16.30.111:8554/vdo5",
+    "CCTV01": "rtsp://172.16.30.8:8554/cctv0",
+    "CCTV02": "rtsp://172.16.30.8:8554/cctv1",
 }
 
 INFER_CONFIG     = "config_infer_yolo26.txt"
-LOG_CSV          = "detect_log_yolo26_brand.csv"
+LOG_CSV          = "v4_brandy.log"
 BRAND_ENGINE     = "shufflenet_brand.engine"
 
 CONF_THRESHOLD       = 0.25
