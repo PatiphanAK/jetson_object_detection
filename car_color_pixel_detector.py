@@ -669,9 +669,9 @@ def run_image(detector, det_input_name, det_output_name, src, out_path):
     if out_path.lower() != "none":
         cv2.imwrite(out_path, annotated)
         print(f"Saved annotated image: {out_path}")
-    if args.show:
-        cv2.imshow("Car Color Detector", annotated)
-        cv2.waitKey(0)
+    # if args.show:
+        # cv2.imshow("Car Color Detector", annotated)
+        # cv2.waitKey(0)
 
 
 def process_frame(detector, det_input_name, det_output_name, frame):
@@ -727,10 +727,10 @@ def run_video(detector, det_input_name, det_output_name, src, out_path):
 
         if writer is not None:
             writer.write(annotated)
-        if args.show:
-            cv2.imshow("Car Color Detector", annotated)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+        # if args.show:
+        #     cv2.imshow("Car Color Detector", annotated)
+        #     if cv2.waitKey(1) & 0xFF == ord("q"):
+        #         break
 
         frame_count += 1
         if frame_count % 30 == 0:
