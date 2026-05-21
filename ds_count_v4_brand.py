@@ -19,6 +19,7 @@ On each frame:
     each car row's brand_id (argmax over 26 classes).
 """
 import csv
+import configparser
 import ctypes
 import signal
 import sys
@@ -39,40 +40,69 @@ import pyds
 
 
 # ── Config ──────────────────────────────────────────────────────────
-SOURCES = {
-    "CCTV01": "rtsp://172.16.30.8:8554/cctv0",
-    "CCTV02": "rtsp://172.16.30.8:8554/cctv1",
-}
-
-INFER_CONFIG     = "config_infer_yolo26.txt"
-LOG_CSV          = "v4_brandy.log"
-BRAND_ENGINE     = "shufflenet_brand.engine"
-
-CONF_THRESHOLD       = 0.25
-CAR_CLASS_ID         = 2     # COCO 'car'
-BRAND_MAX_BATCH      = 16    # engine profile max
-REPORT_EVERY_S       = 300
-CSV_FLUSH_EVERY_ROWS = 60
-
-MUXER_W, MUXER_H         = 640, 640
-BATCHED_PUSH_TIMEOUT_US  = 40_000
-
-MAX_DET_PER_IMAGE = 300
-DET_FEATURES      = 6
+APP_CONFIG = "config.conf"
 
 
-COCO_CLASSES = [
-    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
-    "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat",
-    "dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack",
-    "umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball",
-    "kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket",
-    "bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple",
-    "sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair",
-    "couch","potted plant","bed","dining table","toilet","tv","laptop","mouse",
-    "remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator",
-    "book","clock","vase","scissors","teddy bear","hair drier","toothbrush",
-]
+def _split_csv_items(value):
+    return [x.strip() for x in value.replace("\n", ",").split(",") if x.strip()]
+
+
+def load_runtime_config(path):
+    parser = configparser.ConfigParser()
+    parser.optionxform = str
+    if not parser.read(path):
+        raise FileNotFoundError(f"Cannot read config file: {path}")
+    if not parser.has_section("app"):
+        raise RuntimeError(f"Missing [app] section in {path}")
+    if not parser.has_section("sources"):
+        raise RuntimeError(f"Missing [sources] section in {path}")
+
+    app = parser["app"]
+    sources = dict(parser.items("sources"))
+    coco_classes = _split_csv_items(app.get("coco-classes", ""))
+    if not sources:
+        raise RuntimeError(f"No cameras configured in [sources] section of {path}")
+    if not coco_classes:
+        raise RuntimeError(f"No coco-classes configured in [app] section of {path}")
+
+    return {
+        "sources": sources,
+        "infer_config": app.get("infer-config", path),
+        "log_csv": app.get("log-csv", "v4_brandy.log"),
+        "brand_engine": app.get("brand-engine", "shufflenet_brand.engine"),
+        "conf_threshold": app.getfloat("conf-threshold", fallback=0.25),
+        "car_class_id": app.getint("car-class-id", fallback=2),
+        "brand_max_batch": app.getint("brand-max-batch", fallback=16),
+        "report_every_s": app.getint("report-every-s", fallback=300),
+        "csv_flush_every_rows": app.getint("csv-flush-every-rows", fallback=60),
+        "muxer_w": app.getint("muxer-width", fallback=640),
+        "muxer_h": app.getint("muxer-height", fallback=640),
+        "batched_push_timeout_us": app.getint("batched-push-timeout-us", fallback=40000),
+        "max_det_per_image": app.getint("max-det-per-image", fallback=300),
+        "det_features": app.getint("det-features", fallback=6),
+        "coco_classes": coco_classes,
+    }
+
+
+CFG = load_runtime_config(APP_CONFIG)
+SOURCES = CFG["sources"]
+INFER_CONFIG = CFG["infer_config"]
+LOG_CSV = CFG["log_csv"]
+BRAND_ENGINE = CFG["brand_engine"]
+
+CONF_THRESHOLD = CFG["conf_threshold"]
+CAR_CLASS_ID = CFG["car_class_id"]
+BRAND_MAX_BATCH = CFG["brand_max_batch"]
+REPORT_EVERY_S = CFG["report_every_s"]
+CSV_FLUSH_EVERY_ROWS = CFG["csv_flush_every_rows"]
+
+MUXER_W, MUXER_H = CFG["muxer_w"], CFG["muxer_h"]
+BATCHED_PUSH_TIMEOUT_US = CFG["batched_push_timeout_us"]
+
+MAX_DET_PER_IMAGE = CFG["max_det_per_image"]
+DET_FEATURES = CFG["det_features"]
+
+COCO_CLASSES = CFG["coco_classes"]
 
 
 # ── ShuffleNet brand classifier (pycuda + TRT 8.2) ──────────────────
