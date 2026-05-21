@@ -95,6 +95,16 @@ COCO_CLASSES = CFG["coco_classes"]
 UNKNOWN_BRAND_IDX = CFG["unknown_brand_idx"]
 CSV_FLUSH_EVERY_ROWS = CFG["csv_flush_every_rows"]
 
+# Vehicle-only output: map COCO ID -> (display name, mapped 0..3 id).
+# 80-class detector keeps; we filter & remap to detect.py's 4-class layout.
+VEHICLE_MAP = {
+    2: ("car",        0),
+    3: ("motorbike",  1),
+    5: ("bus",        2),
+    7: ("truck",      3),
+}
+
+
 
 # ── ShuffleNet brand classifier (pycuda + TRT 8.2) ──────────────────
 class BrandClassifier:
@@ -296,11 +306,14 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
                 break
             continue
 
-        # Aggregate per-class counts for this frame (local, no cross-batch state).
+        # Vehicle-only filter + remap to detect.py 4-class layout.
         frame_cls = defaultdict(lambda: {"count": 0, "max_conf": 0.0})
         for row in dets:
             cid = int(row[5])
-            cname = COCO_CLASSES[cid] if 0 <= cid < len(COCO_CLASSES) else f"class-{cid}"
+            mapped = VEHICLE_MAP.get(cid)
+            if mapped is None:
+                continue   # drop non-vehicle classes (person, traffic light, etc.)
+            cname, _vid = mapped
             e = frame_cls[cname]
             e["count"] += 1
             if row[4] > e["max_conf"]:
