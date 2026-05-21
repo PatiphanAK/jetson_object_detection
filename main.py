@@ -20,12 +20,13 @@ On each frame:
 """
 
 import configparser
-import csv
 import ctypes
 import signal
 import sys
 import time
 from collections import defaultdict
+
+from log import DetectionLogger
 
 import cv2
 import numpy as np
@@ -222,16 +223,12 @@ total_counts = {c: defaultdict(int) for c in cam_names}
 total_brands = defaultdict(int)  # brand_id -> total cars
 batch_count = 0
 last_report_t = time.time()
-rows_since_flush = 0
 
-csv_file = None
-csv_writer = None
-fps_file = None
-fps_writer = None
 last_snapshot_t = None
 last_snapshot_cam_frames = {}
 g_main_loop = None
 classifier = None
+logger = None
 
 
 def layer_to_numpy(layer):
@@ -281,7 +278,7 @@ def crop_clip(img, x1, y1, x2, y2):
 
 
 def infer_src_pad_buffer_probe(pad, info, u_data):
-    global batch_count, last_report_t, rows_since_flush
+    global batch_count, last_report_t
     gst_buffer = info.get_buffer()
     if not gst_buffer:
         return Gst.PadProbeReturn.OK
@@ -424,14 +421,9 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
             i += BRAND_MAX_BATCH
 
     # Write all rows
-    for row in pending_rows:
-        csv_writer.writerow(row)
-        rows_since_flush += 1
+    logger.write_detection_rows(pending_rows)
 
     batch_count += 1
-    if rows_since_flush >= CSV_FLUSH_EVERY_ROWS:
-        csv_file.flush()
-        rows_since_flush = 0
 
     now = time.time()
     if now - last_report_t >= REPORT_EVERY_S:
@@ -468,8 +460,7 @@ def print_report():
             top = sorted(counts.items(), key=lambda x: -x[1])[:6]
             top_s = " ".join(f"{c}={k}" for c, k in top)
             print(f"  {cam:<6} frames={n:>6} fps={fps:5.1f}  {top_s}")
-        if fps_writer is not None and elapsed > 0:
-            fps_writer.writerow([ts, cam, delta, f"{fps:.3f}", f"{elapsed:.3f}"])
+        logger.write_fps_row(ts, cam, delta, fps, elapsed)
 
     if total_brands:
         top_b = sorted(total_brands.items(), key=lambda x: -x[1])[:8]
@@ -477,11 +468,7 @@ def print_report():
         print(f"  brands top:   {bs}")
     print("=" * 60 + "\n")
     sys.stdout.flush()
-    if fps_file is not None:
-        try:
-            fps_file.flush()
-        except Exception:
-            pass
+    logger.flush_fps()
 
     last_snapshot_t = now
     last_snapshot_cam_frames = {cam: cam_frame_count[cam] for cam in cam_names}
@@ -609,29 +596,13 @@ def build_pipeline():
 
 
 def main():
-    global csv_file, csv_writer, g_main_loop, last_report_t, classifier
+    global g_main_loop, last_report_t, classifier, logger
 
     print(f"[INFO] Loading brand classifier: {BRAND_ENGINE}")
     classifier = BrandClassifier(BRAND_ENGINE, max_batch=BRAND_MAX_BATCH)
     print("[INFO] classifier ready")
 
-    csv_file = open(LOG_CSV, "w", newline="", buffering=1)
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(
-        [
-            "timestamp",
-            "cam",
-            "cam_frame",
-            "class",
-            "confidence",
-            "count_this_frame",
-            "brand_id",
-        ]
-    )
-    global fps_file, fps_writer
-    fps_file = open(FPS_LOG, "w", newline="", buffering=1)
-    fps_writer = csv.writer(fps_file)
-    fps_writer.writerow(["timestamp", "cam", "frames_delta", "fps", "elapsed_s"])
+    logger = DetectionLogger(LOG_CSV, FPS_LOG, CSV_FLUSH_EVERY_ROWS)
 
     pipeline = build_pipeline()
     g_main_loop = GLib.MainLoop()
@@ -663,18 +634,8 @@ def main():
         print("\n[INFO] Stopping pipeline...")
         print_report()
         pipeline.set_state(Gst.State.NULL)
-        try:
-            csv_file.flush()
-            csv_file.close()
-        except Exception:
-            pass
+        logger.close()
         print(f"[INFO] CSV saved -> {LOG_CSV}")
-        try:
-            if fps_file is not None:
-                fps_file.flush()
-                fps_file.close()
-        except Exception:
-            pass
         print(f"[INFO] FPS log -> {FPS_LOG}")
 
 
