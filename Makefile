@@ -8,7 +8,6 @@ MAIN     := main.py
 TESTS    := test_main
 CONFIG   := config.conf
 LOG_CSV  := v4_brandy.log
-FPS_CSV  := v4_fps.log
 RUN_LOG  := /tmp/run.log
 PROCESS  := venv/bin/python -u main.py
 PIDFILE  := /tmp/main.pid
@@ -20,7 +19,7 @@ C_GREEN  := \033[32m
 C_YELLOW := \033[33m
 C_RESET  := \033[0m
 
-.PHONY: help run run-fg stop restart status logs logs-tail report fps test \
+.PHONY: help run run-fg stop restart status logs logs-tail report test \
         check-env install clean clean-logs clean-cache distclean \
         rebuild-engine jetson-clocks power-max temp lint git-status \
         commit-check perf-snapshot
@@ -33,7 +32,7 @@ help:  ## Show this help
 	@printf "$(C_BOLD)Run / control$(C_RESET)\n"
 	@awk 'BEGIN {FS = ":.*?## "} /^(run|run-fg|stop|restart|status):.*?## / {printf "  $(C_GREEN)%-18s$(C_RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\n$(C_BOLD)Logs / monitoring$(C_RESET)\n"
-	@awk 'BEGIN {FS = ":.*?## "} /^(logs|logs-tail|report|fps|perf-snapshot|temp):.*?## / {printf "  $(C_GREEN)%-18s$(C_RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^(logs|logs-tail|report|perf-snapshot|temp):.*?## / {printf "  $(C_GREEN)%-18s$(C_RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\n$(C_BOLD)Dev / test$(C_RESET)\n"
 	@awk 'BEGIN {FS = ":.*?## "} /^(test|check-env|install|lint|git-status|commit-check):.*?## / {printf "  $(C_GREEN)%-18s$(C_RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\n$(C_BOLD)Perf / hardware$(C_RESET)\n"
@@ -99,15 +98,11 @@ report:  ## Print last full [REPORT] block from run log
 	@awk '/^=+$$/{block=""; in_block=1; next} in_block{block=block $$0 "\n"} /\[REPORT\]/{in_block=1; block=$$0 "\n"} END{print block}' \
 	  $(RUN_LOG) 2>/dev/null || echo "no log"
 
-fps:  ## Show last 10 fps rows
-	@printf "$(C_BOLD)$(FPS_CSV) tail:$(C_RESET)\n"
-	@tail -11 $(FPS_CSV) 2>/dev/null || echo "no fps log"
-
-perf-snapshot:  ## Single tegrastats line + last fps row
+perf-snapshot:  ## Single tegrastats line + tail of latest log
 	@printf "$(C_BOLD)tegrastats:$(C_RESET) "
 	@sudo -n tegrastats --interval 100 2>/dev/null | head -1 || \
 	  cat /proc/loadavg | awk '{print "load:", $$1, $$2, $$3}'
-	@$(MAKE) -s fps
+	@latest=$$(ls -1t [0-9]*_v4_brandy*.log 2>/dev/null | head -1); [ -n "$$latest" ] && echo "log: $$latest"; tail -3 "$$latest" 2>/dev/null || echo "no log yet"
 
 temp:  ## Show all thermal zones
 	@for z in /sys/devices/virtual/thermal/thermal_zone*; do \
@@ -174,8 +169,8 @@ rebuild-engine:  ## Rebuild TensorRT engine from ONNX (DON'T copy .engine across
 # ── Clean ───────────────────────────────────────────────────────────
 clean: clean-logs clean-cache  ## Remove logs + caches
 
-clean-logs:  ## Remove CSV log files
-	@rm -f $(LOG_CSV) $(FPS_CSV) $(RUN_LOG)
+clean-logs:  ## Remove CSV log files (timestamped + run.log)
+	@rm -f [0-9]*_v4_brandy*.log [0-9]*_v4_fps*.log $(LOG_CSV) v4_fps.log $(RUN_LOG)
 	@echo "logs cleared"
 
 clean-cache:  ## Remove Python __pycache__

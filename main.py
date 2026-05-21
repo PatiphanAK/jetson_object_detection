@@ -73,7 +73,6 @@ def load_runtime_config(path):
         "infer_config": app.get("infer-config", path),
         "log_csv": app.get("log-csv", "v4_brandy.log"),
         "brand_engine": app.get("brand-engine", "model/classy.engine"),
-        "fps_log": app.get("fps-log", "v4_fps.log"),
         "conf_threshold": app.getfloat("conf-threshold", fallback=0.25),
         "car_class_id": app.getint("car-class-id", fallback=2),
         "brand_max_batch": app.getint("brand-max-batch", fallback=16),
@@ -95,7 +94,6 @@ SOURCES = CFG["sources"]
 INFER_CONFIG = CFG["infer_config"]
 LOG_CSV = CFG["log_csv"]
 BRAND_ENGINE = CFG["brand_engine"]
-FPS_LOG = CFG["fps_log"]
 
 CONF_THRESHOLD = CFG["conf_threshold"]
 CAR_CLASS_ID = CFG["car_class_id"]
@@ -228,8 +226,6 @@ rows_since_flush = 0
 
 csv_file = None
 csv_writer = None
-fps_file = None
-fps_writer = None
 last_snapshot_t = None
 last_snapshot_cam_frames = {}
 g_main_loop = None
@@ -476,21 +472,12 @@ def print_report():
             top = sorted(counts.items(), key=lambda x: -x[1])[:6]
             top_s = " ".join(f"{c}={k}" for c, k in top)
             print(f"  {cam:<6} frames={n:>6} fps={fps:5.1f}  {top_s}")
-        if fps_writer is not None and elapsed > 0:
-            cam_id = cam_names.index(cam) if cam in cam_names else -1
-            fps_writer.writerow([f"{ts_unix:.3f}", cam_id, delta, f"{fps:.3f}", f"{elapsed:.3f}"])
-
     if total_brands:
         top_b = sorted(total_brands.items(), key=lambda x: -x[1])[:8]
         bs = " ".join(f"brand_{c}={k}" for c, k in top_b)
         print(f"  brands top:   {bs}")
     print("=" * 60 + "\n")
     sys.stdout.flush()
-    if fps_file is not None:
-        try:
-            fps_file.flush()
-        except Exception:
-            pass
 
     last_snapshot_t = now
     last_snapshot_cam_frames = {cam: cam_frame_count[cam] for cam in cam_names}
@@ -624,6 +611,15 @@ def main():
     classifier = BrandClassifier(BRAND_ENGINE, max_batch=BRAND_MAX_BATCH)
     print("[INFO] classifier ready")
 
+    # Self-healing: prefix start-epoch to detection log filename so a
+    # restart never overwrites the previous run.
+    global LOG_CSV
+    from pathlib import Path as _Path
+    _epoch = int(time.time())
+    _p = _Path(LOG_CSV)
+    LOG_CSV = str(_p.with_name(f"{_epoch}_{_p.name}"))
+    print(f"[INFO] Detection log -> {LOG_CSV}")
+
     csv_file = open(LOG_CSV, "w", newline="", buffering=1)
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(
@@ -638,11 +634,6 @@ def main():
             "color",
         ]
     )
-    global fps_file, fps_writer
-    fps_file = open(FPS_LOG, "w", newline="", buffering=1)
-    fps_writer = csv.writer(fps_file)
-    fps_writer.writerow(["ts_unix", "cam_id", "frames_delta", "fps", "elapsed_s"])
-
     pipeline = build_pipeline()
     g_main_loop = GLib.MainLoop()
     bus = pipeline.get_bus()
@@ -679,13 +670,6 @@ def main():
         except Exception:
             pass
         print(f"[INFO] CSV saved -> {LOG_CSV}")
-        try:
-            if fps_file is not None:
-                fps_file.flush()
-                fps_file.close()
-        except Exception:
-            pass
-        print(f"[INFO] FPS log -> {FPS_LOG}")
 
 
 if __name__ == "__main__":
