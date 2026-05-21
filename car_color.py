@@ -18,36 +18,35 @@ Public API:
 import cv2
 import numpy as np
 
-
 # ----------------------------------------------------------------------
 # Reference palette (LAB nearest-color matching)
 # ----------------------------------------------------------------------
 # Each entry: (name, (R, G, B), thai_label)
 REFERENCE_PALETTE = [
-    ("Black",          (0,   0,   0),   "ดำ"),
-    ("White",          (255, 255, 255), "ขาว"),
-    ("Gray",           (128, 128, 128), "เทา"),
-    ("Metallic Green", (74,  124, 111), "เขียวเมทาลิค"),
-    ("Chartreuse",     (180, 215, 50),  "เหลืองเขียว"),
-    ("Blue",           (135, 206, 235), "ฟ้า"),
-    ("Charcoal",       (54,  69,  79),  "เทาเข้ม"),
-    ("Silver",         (192, 192, 192), "เงิน"),
-    ("Gold",           (212, 175, 55),  "ทอง"),
-    ("Navy Blue",      (0,   0,   128), "น้ำเงิน"),
-    ("Slate Blue",     (112, 128, 144), "เทาฟ้า"),
-    ("Bronze",         (140, 120, 83),  "บรอนซ์"),
-    ("Red",            (220, 20,  60),  "แดง"),
-    ("Maroon",         (128, 0,   0),   "แดงเลือดหมู"),
-    ("Pink",           (255, 182, 193), "ชมพู"),
-    ("Bronze Gold",    (175, 142, 63),  "บรอนซ์ทอง"),
-    ("Bronze Gray",    (130, 120, 108), "บรอนซ์เทา"),
-    ("Bronze Silver",  (169, 163, 154), "บรอนซ์เงิน"),
-    ("Orange",         (255, 140, 0),   "ส้ม"),
-    ("Yellow",         (255, 230, 0),   "เหลือง"),
-    ("Green",          (0,   128, 0),   "เขียว"),
-    ("Light Green",    (144, 238, 144), "เขียวอ่อน"),
-    ("Dark Green",     (0,   100, 0),   "เขียวเข้ม"),
-    ("Olive Green",    (107, 142, 35),  "เขียวขี้ม้า"),
+    ("Black", (0, 0, 0), "ดำ"),
+    ("White", (255, 255, 255), "ขาว"),
+    ("Gray", (128, 128, 128), "เทา"),
+    ("Metallic Green", (74, 124, 111), "เขียวเมทาลิค"),
+    ("Chartreuse", (180, 215, 50), "เหลืองเขียว"),
+    ("Blue", (135, 206, 235), "ฟ้า"),
+    ("Charcoal", (54, 69, 79), "เทาเข้ม"),
+    ("Silver", (192, 192, 192), "เงิน"),
+    ("Gold", (212, 175, 55), "ทอง"),
+    ("Navy Blue", (0, 0, 128), "น้ำเงิน"),
+    ("Slate Blue", (112, 128, 144), "เทาฟ้า"),
+    ("Bronze", (140, 120, 83), "บรอนซ์"),
+    ("Red", (220, 20, 60), "แดง"),
+    ("Maroon", (128, 0, 0), "แดงเลือดหมู"),
+    ("Pink", (255, 182, 193), "ชมพู"),
+    ("Bronze Gold", (175, 142, 63), "บรอนซ์ทอง"),
+    ("Bronze Gray", (130, 120, 108), "บรอนซ์เทา"),
+    ("Bronze Silver", (169, 163, 154), "บรอนซ์เงิน"),
+    ("Orange", (255, 140, 0), "ส้ม"),
+    ("Yellow", (255, 230, 0), "เหลือง"),
+    ("Green", (0, 128, 0), "เขียว"),
+    ("Light Green", (144, 238, 144), "เขียวอ่อน"),
+    ("Dark Green", (0, 100, 0), "เขียวเข้ม"),
+    ("Olive Green", (107, 142, 35), "เขียวขี้ม้า"),
 ]
 
 UNKNOWN_NAME = "Unknown"
@@ -55,10 +54,12 @@ UNKNOWN_NAME = "Unknown"
 # Two-tone rules: (set_of_names_A, set_of_names_B, output_label).
 TWO_TONE_RULES = [
     ({"Blue", "Navy Blue", "Slate Blue"}, {"White"}, "Blue-White"),
-    ({"Red", "Maroon"},                   {"White"}, "Red-White"),
-    ({"Yellow"},
-     {"Green", "Dark Green", "Light Green", "Olive Green", "Chartreuse"},
-     "Yellow-Green"),
+    ({"Red", "Maroon"}, {"White"}, "Red-White"),
+    (
+        {"Yellow"},
+        {"Green", "Dark Green", "Light Green", "Olive Green", "Chartreuse"},
+        "Yellow-Green",
+    ),
 ]
 TWO_TONE_MIN = 0.18
 WHITE_PROMOTE_MIN = 0.08
@@ -118,11 +119,28 @@ def _apply_white_promote(top, threshold=WHITE_PROMOTE_MIN):
     clearly chromatic dominator."""
     if threshold <= 0 or not top:
         return top
-    chromatic = {"Red", "Maroon", "Orange", "Yellow", "Gold", "Bronze",
-                 "Bronze Gold", "Green", "Dark Green", "Light Green",
-                 "Olive Green", "Metallic Green", "Chartreuse",
-                 "Blue", "Navy Blue", "Slate Blue", "Pink",
-                 "Blue-White", "Red-White", "Yellow-Green"}
+    chromatic = {
+        "Red",
+        "Maroon",
+        "Orange",
+        "Yellow",
+        "Gold",
+        "Bronze",
+        "Bronze Gold",
+        "Green",
+        "Dark Green",
+        "Light Green",
+        "Olive Green",
+        "Metallic Green",
+        "Chartreuse",
+        "Blue",
+        "Navy Blue",
+        "Slate Blue",
+        "Pink",
+        "Blue-White",
+        "Red-White",
+        "Yellow-Green",
+    }
     top_name, top_share, _ = top[0]
     if top_name in chromatic and top_share >= 0.20:
         return top
@@ -156,7 +174,7 @@ def extract_top_colors(crop_bgr, k=3, sample_size=2000):
     v_channel = hsv[..., 2]
     s_channel = hsv[..., 1]
     keep_mask = ~((v_channel > 240) & (s_channel < 25))
-    keep_mask &= (v_channel > 12)
+    keep_mask &= v_channel > 12
     kept_pixels_bgr = roi[keep_mask]
     if kept_pixels_bgr.shape[0] < 50:
         kept_pixels_bgr = roi.reshape(-1, 3)
@@ -176,7 +194,11 @@ def extract_top_colors(crop_bgr, k=3, sample_size=2000):
     )
     labels = labels.flatten()
     centers_bgr_u8 = centers_bgr.astype(np.uint8).reshape(-1, 1, 3)
-    centers_lab = cv2.cvtColor(centers_bgr_u8, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+    centers_lab = (
+        cv2.cvtColor(centers_bgr_u8, cv2.COLOR_BGR2LAB)
+        .reshape(-1, 3)
+        .astype(np.float32)
+    )
 
     name_counts = {}
     name_bgr_sum = {}

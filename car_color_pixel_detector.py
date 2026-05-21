@@ -14,10 +14,11 @@ Usage:
   python3 car_color_pixel_detector.py --input 0   # webcam
 """
 
+import argparse
 import os
 import sys
-import argparse
 import time
+
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -28,18 +29,38 @@ import onnxruntime as ort
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 parser = argparse.ArgumentParser(description="Car Color Pixel Detector for Jetson Nano")
-parser.add_argument("--input", type=str, default=os.path.join(BASE_DIR, "vdo2.mp4"),
-                    help="Path to video, image, RTSP URL, or webcam index (e.g. 0)")
-parser.add_argument("--output", type=str, default=os.path.join(BASE_DIR, "vdo2_colors.mkv"),
-                    help="Output video/image path. Use 'none' to disable saving.")
-parser.add_argument("--detector", type=str, default=os.path.join(BASE_DIR, "best_vehicle_detector_416.onnx"),
-                    help="YOLO ONNX detector path")
-parser.add_argument("--conf", type=float, default=0.50, help="YOLO confidence threshold")
-parser.add_argument("--k", type=int, default=3, help="Number of dominant colors per crop")
+parser.add_argument(
+    "--input",
+    type=str,
+    default=os.path.join(BASE_DIR, "vdo2.mp4"),
+    help="Path to video, image, RTSP URL, or webcam index (e.g. 0)",
+)
+parser.add_argument(
+    "--output",
+    type=str,
+    default=os.path.join(BASE_DIR, "vdo2_colors.mkv"),
+    help="Output video/image path. Use 'none' to disable saving.",
+)
+parser.add_argument(
+    "--detector",
+    type=str,
+    default=os.path.join(BASE_DIR, "best_vehicle_detector_416.onnx"),
+    help="YOLO ONNX detector path",
+)
+parser.add_argument(
+    "--conf", type=float, default=0.50, help="YOLO confidence threshold"
+)
+parser.add_argument(
+    "--k", type=int, default=3, help="Number of dominant colors per crop"
+)
 parser.add_argument("--show", action="store_true", help="Display window (requires GUI)")
-parser.add_argument("--white-min", type=float, default=0.08,
-                    help="If 'White' appears in top-K with at least this share (0-1), "
-                         "promote it to rank 1. Set 0 to disable. Default 0.08 (8%%).")
+parser.add_argument(
+    "--white-min",
+    type=float,
+    default=0.08,
+    help="If 'White' appears in top-K with at least this share (0-1), "
+    "promote it to rank 1. Set 0 to disable. Default 0.08 (8%%).",
+)
 args = parser.parse_args()
 
 DETECTOR_ONNX_PATH = args.detector
@@ -57,30 +78,30 @@ YOLO_CLASSES = {0: "car", 1: "motorcycle", 2: "truck", 3: "bus"}
 # query centroid — perceptually uniform, so "Silver" vs "Bronze Silver" vs
 # "Bronze Gray" land correctly without manually-tuned HSV cutoffs.
 REFERENCE_PALETTE = [
-    ("Black",          (0,   0,   0),   "ดำ"),
-    ("White",          (255, 255, 255), "ขาว"),
-    ("Gray",           (128, 128, 128), "เทา"),
-    ("Metallic Green", (74,  124, 111), "เขียวเมทาลิค"),
-    ("Chartreuse",     (180, 215, 50),  "เหลืองเขียว"),
-    ("Blue",           (135, 206, 235), "ฟ้า"),
-    ("Charcoal",       (54,  69,  79),  "เทาเข้ม"),
-    ("Silver",         (192, 192, 192), "เงิน"),
-    ("Gold",           (212, 175, 55),  "ทอง"),
-    ("Navy Blue",      (0,   0,   128), "น้ำเงิน"),
-    ("Slate Blue",     (112, 128, 144), "เทาฟ้า"),
-    ("Bronze",         (140, 120, 83),  "บรอนซ์"),
-    ("Red",            (220, 20,  60),  "แดง"),
-    ("Maroon",         (128, 0,   0),   "แดงเลือดหมู"),
-    ("Pink",           (255, 182, 193), "ชมพู"),
-    ("Bronze Gold",    (175, 142, 63),  "บรอนซ์ทอง"),
-    ("Bronze Gray",    (130, 120, 108), "บรอนซ์เทา"),
-    ("Bronze Silver",  (169, 163, 154), "บรอนซ์เงิน"),
-    ("Orange",         (255, 140, 0),   "ส้ม"),
-    ("Yellow",         (255, 230, 0),   "เหลือง"),
-    ("Green",          (0,   128, 0),   "เขียว"),
-    ("Light Green",    (144, 238, 144), "เขียวอ่อน"),
-    ("Dark Green",     (0,   100, 0),   "เขียวเข้ม"),
-    ("Olive Green",    (107, 142, 35),  "เขียวขี้ม้า"),
+    ("Black", (0, 0, 0), "ดำ"),
+    ("White", (255, 255, 255), "ขาว"),
+    ("Gray", (128, 128, 128), "เทา"),
+    ("Metallic Green", (74, 124, 111), "เขียวเมทาลิค"),
+    ("Chartreuse", (180, 215, 50), "เหลืองเขียว"),
+    ("Blue", (135, 206, 235), "ฟ้า"),
+    ("Charcoal", (54, 69, 79), "เทาเข้ม"),
+    ("Silver", (192, 192, 192), "เงิน"),
+    ("Gold", (212, 175, 55), "ทอง"),
+    ("Navy Blue", (0, 0, 128), "น้ำเงิน"),
+    ("Slate Blue", (112, 128, 144), "เทาฟ้า"),
+    ("Bronze", (140, 120, 83), "บรอนซ์"),
+    ("Red", (220, 20, 60), "แดง"),
+    ("Maroon", (128, 0, 0), "แดงเลือดหมู"),
+    ("Pink", (255, 182, 193), "ชมพู"),
+    ("Bronze Gold", (175, 142, 63), "บรอนซ์ทอง"),
+    ("Bronze Gray", (130, 120, 108), "บรอนซ์เทา"),
+    ("Bronze Silver", (169, 163, 154), "บรอนซ์เงิน"),
+    ("Orange", (255, 140, 0), "ส้ม"),
+    ("Yellow", (255, 230, 0), "เหลือง"),
+    ("Green", (0, 128, 0), "เขียว"),
+    ("Light Green", (144, 238, 144), "เขียวอ่อน"),
+    ("Dark Green", (0, 100, 0), "เขียวเข้ม"),
+    ("Olive Green", (107, 142, 35), "เขียวขี้ม้า"),
 ]
 
 UNKNOWN_NAME = "Unknown"
@@ -90,11 +111,15 @@ UNKNOWN_NAME = "Unknown"
 # the combined name instead of the single dominant colour.
 TWO_TONE_RULES = [
     ({"Blue", "Navy Blue", "Slate Blue"}, {"White"}, "Blue-White"),
-    ({"Red", "Maroon"},                   {"White"}, "Red-White"),
-    ({"Yellow"}, {"Green", "Dark Green", "Light Green", "Olive Green", "Chartreuse"},
-                                                     "Yellow-Green"),
+    ({"Red", "Maroon"}, {"White"}, "Red-White"),
+    (
+        {"Yellow"},
+        {"Green", "Dark Green", "Light Green", "Olive Green", "Chartreuse"},
+        "Yellow-Green",
+    ),
 ]
 TWO_TONE_MIN = 0.18  # each side must carry at least this share
+
 
 # Build display swatches (BGR) and the LAB lookup table at module load.
 def _bgr_from_rgb(rgb):
@@ -102,12 +127,14 @@ def _bgr_from_rgb(rgb):
 
 
 NAME_BGR_SWATCH = {name: _bgr_from_rgb(rgb) for name, rgb, _ in REFERENCE_PALETTE}
-NAME_BGR_SWATCH.update({
-    "Blue-White":   (235, 206, 135),
-    "Red-White":    (60,  20,  220),
-    "Yellow-Green": (0,   230, 255),
-    UNKNOWN_NAME:   (100, 100, 100),
-})
+NAME_BGR_SWATCH.update(
+    {
+        "Blue-White": (235, 206, 135),
+        "Red-White": (60, 20, 220),
+        "Yellow-Green": (0, 230, 255),
+        UNKNOWN_NAME: (100, 100, 100),
+    }
+)
 
 # Classification anchors: real cars rarely hit the single canonical RGB above
 # (e.g. "Blue" is sky-blue but most blue cars are darker, "Maroon" misses
@@ -117,73 +144,75 @@ NAME_BGR_SWATCH.update({
 # centre car colours.
 CLASSIFICATION_ANCHORS = [
     # name,          (R, G, B)
-    ("Black",        (0,   0,   0)),
-    ("Black",        (15,  15,  18)),
-    ("Black",        (28,  30,  35)),
-    ("Charcoal",     (54,  69,  79)),
-    ("Charcoal",     (45,  55,  65)),
-    ("Charcoal",     (70,  78,  85)),
-    ("Gray",         (128, 128, 128)),
-    ("Gray",         (100, 100, 105)),
-    ("Gray",         (115, 118, 120)),
-    ("Silver",       (192, 192, 192)),
-    ("Silver",       (170, 170, 172)),
-    ("Silver",       (180, 182, 185)),
-    ("White",        (255, 255, 255)),
-    ("White",        (235, 235, 235)),
-    ("White",        (218, 220, 222)),
-    ("White",        (205, 208, 212)),
+    ("Black", (0, 0, 0)),
+    ("Black", (15, 15, 18)),
+    ("Black", (28, 30, 35)),
+    ("Charcoal", (54, 69, 79)),
+    ("Charcoal", (45, 55, 65)),
+    ("Charcoal", (70, 78, 85)),
+    ("Gray", (128, 128, 128)),
+    ("Gray", (100, 100, 105)),
+    ("Gray", (115, 118, 120)),
+    ("Silver", (192, 192, 192)),
+    ("Silver", (170, 170, 172)),
+    ("Silver", (180, 182, 185)),
+    ("White", (255, 255, 255)),
+    ("White", (235, 235, 235)),
+    ("White", (218, 220, 222)),
+    ("White", (205, 208, 212)),
     # Off-white / cloudy-CCTV whites: user prefers these to read as White, not
     # Silver. Anchors kept above Silver-typical brightness (L > 80 in LAB) so
     # darker mid-tone Silver/Gray pixels still classify correctly.
-    ("White",        (195, 200, 208)),
-    ("Bronze Silver",(169, 163, 154)),
-    ("Bronze Gray",  (130, 120, 108)),
-    ("Bronze Gray",  (110, 100, 90)),
-    ("Bronze",       (140, 120, 83)),
-    ("Bronze Gold",  (175, 142, 63)),
-    ("Slate Blue",   (112, 128, 144)),
-    ("Slate Blue",   (90,  105, 125)),
-    ("Red",          (220, 20,  60)),
-    ("Red",          (200, 40,  50)),
-    ("Red",          (180, 30,  40)),
-    ("Maroon",       (128, 0,   0)),
-    ("Maroon",       (95,  20,  25)),
-    ("Maroon",       (70,  30,  40)),
-    ("Maroon",       (60,  40,  50)),
-    ("Pink",         (255, 182, 193)),
-    ("Orange",       (255, 140, 0)),
-    ("Orange",       (220, 110, 30)),
-    ("Yellow",       (255, 230, 0)),
-    ("Yellow",       (235, 210, 30)),
-    ("Gold",         (212, 175, 55)),
-    ("Gold",         (200, 165, 60)),
-    ("Blue",         (135, 206, 235)),
-    ("Blue",         (60,  140, 210)),
-    ("Blue",         (40,  100, 190)),
-    ("Blue",         (30,  85,  170)),
-    ("Navy Blue",    (0,   0,   128)),
-    ("Navy Blue",    (20,  30,  100)),
-    ("Navy Blue",    (40,  50,  90)),
-    ("Navy Blue",    (25,  35,  70)),
-    ("Green",        (0,   128, 0)),
-    ("Green",        (40,  130, 40)),
-    ("Dark Green",   (0,   100, 0)),
-    ("Dark Green",   (20,  70,  30)),
-    ("Dark Green",   (30,  55,  35)),
-    ("Light Green",  (144, 238, 144)),
-    ("Olive Green",  (107, 142, 35)),
-    ("Olive Green",  (80,  100, 40)),
-    ("Metallic Green", (74,  124, 111)),
-    ("Metallic Green", (60,  100, 90)),
-    ("Chartreuse",   (180, 215, 50)),
+    ("White", (195, 200, 208)),
+    ("Bronze Silver", (169, 163, 154)),
+    ("Bronze Gray", (130, 120, 108)),
+    ("Bronze Gray", (110, 100, 90)),
+    ("Bronze", (140, 120, 83)),
+    ("Bronze Gold", (175, 142, 63)),
+    ("Slate Blue", (112, 128, 144)),
+    ("Slate Blue", (90, 105, 125)),
+    ("Red", (220, 20, 60)),
+    ("Red", (200, 40, 50)),
+    ("Red", (180, 30, 40)),
+    ("Maroon", (128, 0, 0)),
+    ("Maroon", (95, 20, 25)),
+    ("Maroon", (70, 30, 40)),
+    ("Maroon", (60, 40, 50)),
+    ("Pink", (255, 182, 193)),
+    ("Orange", (255, 140, 0)),
+    ("Orange", (220, 110, 30)),
+    ("Yellow", (255, 230, 0)),
+    ("Yellow", (235, 210, 30)),
+    ("Gold", (212, 175, 55)),
+    ("Gold", (200, 165, 60)),
+    ("Blue", (135, 206, 235)),
+    ("Blue", (60, 140, 210)),
+    ("Blue", (40, 100, 190)),
+    ("Blue", (30, 85, 170)),
+    ("Navy Blue", (0, 0, 128)),
+    ("Navy Blue", (20, 30, 100)),
+    ("Navy Blue", (40, 50, 90)),
+    ("Navy Blue", (25, 35, 70)),
+    ("Green", (0, 128, 0)),
+    ("Green", (40, 130, 40)),
+    ("Dark Green", (0, 100, 0)),
+    ("Dark Green", (20, 70, 30)),
+    ("Dark Green", (30, 55, 35)),
+    ("Light Green", (144, 238, 144)),
+    ("Olive Green", (107, 142, 35)),
+    ("Olive Green", (80, 100, 40)),
+    ("Metallic Green", (74, 124, 111)),
+    ("Metallic Green", (60, 100, 90)),
+    ("Chartreuse", (180, 215, 50)),
 ]
 
 _ANCHOR_BGR = np.array(
     [(rgb[2], rgb[1], rgb[0]) for _, rgb in CLASSIFICATION_ANCHORS],
     dtype=np.uint8,
 ).reshape(-1, 1, 3)
-_ANCHOR_LAB = cv2.cvtColor(_ANCHOR_BGR, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+_ANCHOR_LAB = (
+    cv2.cvtColor(_ANCHOR_BGR, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+)
 _ANCHOR_NAMES = [name for name, _ in CLASSIFICATION_ANCHORS]
 
 
@@ -219,8 +248,10 @@ def _dominant_name(roi_bgr, sample_size=1000):
         return None, 0.0
     roi = apply_clahe_lab(roi_bgr)
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    v = hsv[..., 2]; s = hsv[..., 1]
-    keep = ~((v > 240) & (s < 25)); keep &= (v > 12)
+    v = hsv[..., 2]
+    s = hsv[..., 1]
+    keep = ~((v > 240) & (s < 25))
+    keep &= v > 12
     kept = roi[keep]
     if kept.shape[0] < 50:
         kept = roi.reshape(-1, 3)
@@ -234,7 +265,9 @@ def _dominant_name(roi_bgr, sample_size=1000):
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 8, 1.0)
     _, labels, centers = cv2.kmeans(pixels, cc, None, crit, 2, cv2.KMEANS_PP_CENTERS)
     centers_u8 = centers.astype(np.uint8).reshape(-1, 1, 3)
-    centers_lab = cv2.cvtColor(centers_u8, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+    centers_lab = (
+        cv2.cvtColor(centers_u8, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+    )
     name_counts = {}
     labels = labels.flatten()
     for i in range(cc):
@@ -270,8 +303,8 @@ def detect_spatial_two_tone(crop_bgr):
     # Mid 60% of width avoids edge slivers (mirrors, neighbouring vehicles).
     mx1, mx2 = int(w * 0.20), int(w * 0.80)
     # Skip the very top/bottom (sky, road, wheels).
-    upper = crop_bgr[int(h * 0.10):int(h * 0.50), mx1:mx2]
-    lower = crop_bgr[int(h * 0.55):int(h * 0.90), mx1:mx2]
+    upper = crop_bgr[int(h * 0.10) : int(h * 0.50), mx1:mx2]
+    lower = crop_bgr[int(h * 0.55) : int(h * 0.90), mx1:mx2]
 
     up_name, up_share = _dominant_name(upper)
     lo_name, lo_share = _dominant_name(lower)
@@ -283,8 +316,9 @@ def detect_spatial_two_tone(crop_bgr):
         return None
 
     for set_a, set_b, label in TWO_TONE_RULES:
-        if ((up_name in set_a and lo_name in set_b)
-                or (up_name in set_b and lo_name in set_a)):
+        if (up_name in set_a and lo_name in set_b) or (
+            up_name in set_b and lo_name in set_a
+        ):
             return label
     return None
 
@@ -299,7 +333,11 @@ def _apply_two_tone(top):
         share_a = sum(share_of.get(n, 0.0) for n in set_a)
         share_b = sum(share_of.get(n, 0.0) for n in set_b)
         if share_a >= TWO_TONE_MIN and share_b >= TWO_TONE_MIN:
-            combined = (label, share_a + share_b, NAME_BGR_SWATCH.get(label, (200, 200, 200)))
+            combined = (
+                label,
+                share_a + share_b,
+                NAME_BGR_SWATCH.get(label, (200, 200, 200)),
+            )
             others = [t for t in top if t[0] not in set_a and t[0] not in set_b]
             return [combined] + others
     return top
@@ -354,7 +392,7 @@ def extract_top_colors(crop_bgr, k=3, sample_size=2000):
 
     # 3. Filter glass reflections and deep shadows
     keep_mask = ~((v_channel > 240) & (s_channel < 25))
-    keep_mask &= (v_channel > 12)
+    keep_mask &= v_channel > 12
     kept_pixels_bgr = roi[keep_mask]
 
     if kept_pixels_bgr.shape[0] < 50:
@@ -377,7 +415,11 @@ def extract_top_colors(crop_bgr, k=3, sample_size=2000):
     # 5. Classify each centroid via nearest-LAB to the reference palette,
     #    aggregate pixel counts per palette name.
     centers_bgr_u8 = centers_bgr.astype(np.uint8).reshape(-1, 1, 3)
-    centers_lab = cv2.cvtColor(centers_bgr_u8, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+    centers_lab = (
+        cv2.cvtColor(centers_bgr_u8, cv2.COLOR_BGR2LAB)
+        .reshape(-1, 3)
+        .astype(np.float32)
+    )
 
     name_counts = {}
     name_bgr_sum = {}
@@ -415,8 +457,12 @@ def extract_top_colors(crop_bgr, k=3, sample_size=2000):
                     if n in set_a or n in set_b:
                         related_share += s
                 break
-        combined_share = max(0.5, related_share)  # at least 0.5 because two halves match
-        top = [(spatial_label, combined_share, sw)] + [t for t in top if t[0] != spatial_label][:k - 1]
+        combined_share = max(
+            0.5, related_share
+        )  # at least 0.5 because two halves match
+        top = [(spatial_label, combined_share, sw)] + [
+            t for t in top if t[0] != spatial_label
+        ][: k - 1]
     else:
         # 7. Content-based two-tone fallback (Blue-White, Red-White, Yellow-Green).
         top = _apply_two_tone(top)
@@ -429,11 +475,28 @@ def extract_top_colors(crop_bgr, k=3, sample_size=2000):
     #    top-K, move White to rank 1. Any chromatic in top-K blocks this so
     #    we don't relabel a dark-green/dark-blue car as White.
     if WHITE_PROMOTE_MIN > 0 and top:
-        chromatic_names = {"Red", "Maroon", "Orange", "Yellow", "Gold", "Bronze",
-                           "Bronze Gold", "Green", "Dark Green", "Light Green",
-                           "Olive Green", "Metallic Green", "Chartreuse",
-                           "Blue", "Navy Blue", "Slate Blue", "Pink",
-                           "Blue-White", "Red-White", "Yellow-Green"}
+        chromatic_names = {
+            "Red",
+            "Maroon",
+            "Orange",
+            "Yellow",
+            "Gold",
+            "Bronze",
+            "Bronze Gold",
+            "Green",
+            "Dark Green",
+            "Light Green",
+            "Olive Green",
+            "Metallic Green",
+            "Chartreuse",
+            "Blue",
+            "Navy Blue",
+            "Slate Blue",
+            "Pink",
+            "Blue-White",
+            "Red-White",
+            "Yellow-Green",
+        }
         any_chromatic = any(n in chromatic_names for n, _, _ in top)
         if not any_chromatic:
             for i, (name, share, _bgr) in enumerate(top):
@@ -484,8 +547,16 @@ def draw_results(frame, x1, y1, x2, y2, cls_name, score, top_colors):
 
     header = f"{cls_name} {score:.2f}"
     cv2.rectangle(frame, (x1, y1 - 22), (x1 + 8 * len(header) + 8, y1), (0, 255, 0), -1)
-    cv2.putText(frame, header, (x1 + 4, y1 - 6),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1, cv2.LINE_AA)
+    cv2.putText(
+        frame,
+        header,
+        (x1 + 4, y1 - 6),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (0, 0, 0),
+        1,
+        cv2.LINE_AA,
+    )
 
     # Color bar: stacked horizontal segments, width proportional to share
     bar_w = max(60, x2 - x1)
@@ -501,21 +572,41 @@ def draw_results(frame, x1, y1, x2, y2, cls_name, score, top_colors):
     for name, share, _avg_bgr in top_colors:
         seg_w = max(2, int(bar_w * share / total_share))
         swatch = NAME_BGR_SWATCH.get(name, NAME_BGR_SWATCH[UNKNOWN_NAME])
-        cv2.rectangle(frame, (cursor_x, bar_y), (cursor_x + seg_w, bar_y + bar_h), swatch, -1)
-        cv2.rectangle(frame, (cursor_x, bar_y), (cursor_x + seg_w, bar_y + bar_h), (0, 0, 0), 1)
+        cv2.rectangle(
+            frame, (cursor_x, bar_y), (cursor_x + seg_w, bar_y + bar_h), swatch, -1
+        )
+        cv2.rectangle(
+            frame, (cursor_x, bar_y), (cursor_x + seg_w, bar_y + bar_h), (0, 0, 0), 1
+        )
         cursor_x += seg_w
 
     # Text legend below the bar
     text_y = bar_y + bar_h + 14
     for i, (name, share, _avg_bgr) in enumerate(top_colors):
-        line = f"{i+1}. {name} {share*100:.0f}%"
+        line = f"{i + 1}. {name} {share * 100:.0f}%"
         ty = text_y + i * 14
         if ty > frame.shape[0] - 2:
             break
-        cv2.putText(frame, line, (x1, ty),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(frame, line, (x1, ty),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(
+            frame,
+            line,
+            (x1, ty),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (0, 0, 0),
+            3,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame,
+            line,
+            (x1, ty),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
 
 
 # ----------------------------------------------------------------------
@@ -589,13 +680,21 @@ def process_frame(detector, det_input_name, det_output_name, frame):
     out = detector.run([det_output_name], {det_input_name: inp})[0][0]
     detections = parse_detections(out, w, h, YOLO_CONF_THRESHOLD)
 
-    for (x1, y1, x2, y2, score, cls_id) in detections:
+    for x1, y1, x2, y2, score, cls_id in detections:
         crop = frame[y1:y2, x1:x2]
         top_colors = extract_top_colors(crop, k=TOP_K_COLORS)
         if not top_colors:
             continue
-        draw_results(frame, x1, y1, x2, y2,
-                     YOLO_CLASSES.get(cls_id, "vehicle"), score, top_colors)
+        draw_results(
+            frame,
+            x1,
+            y1,
+            x2,
+            y2,
+            YOLO_CLASSES.get(cls_id, "vehicle"),
+            score,
+            top_colors,
+        )
     return frame
 
 
@@ -611,7 +710,9 @@ def run_video(detector, det_input_name, det_output_name, src, out_path):
 
     writer = None
     if out_path.lower() != "none":
-        fourcc = cv2.VideoWriter_fourcc(*"XVID" if out_path.endswith(".mkv") else "mp4v")
+        fourcc = cv2.VideoWriter_fourcc(
+            *"XVID" if out_path.endswith(".mkv") else "mp4v"
+        )
         writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
         print(f"Writing output to: {out_path}")
 
@@ -634,14 +735,14 @@ def run_video(detector, det_input_name, det_output_name, src, out_path):
         frame_count += 1
         if frame_count % 30 == 0:
             elapsed = time.time() - t0
-            print(f"frame={frame_count} avg_fps={frame_count/elapsed:.2f}")
+            print(f"frame={frame_count} avg_fps={frame_count / elapsed:.2f}")
 
     cap.release()
     if writer is not None:
         writer.release()
     if args.show:
         cv2.destroyAllWindows()
-    print(f"Done. Processed {frame_count} frames in {time.time()-t0:.1f}s")
+    print(f"Done. Processed {frame_count} frames in {time.time() - t0:.1f}s")
 
 
 def main():

@@ -129,6 +129,41 @@ class ConfigLoaderTests(unittest.TestCase):
         self.assertEqual(cfg["muxer_w"], 320)
         self.assertEqual(cfg["coco_classes"], ["person", "car", "truck"])
 
+    def test_parses_unknown_brand_idx(self):
+        import main as _main, tempfile, os, textwrap
+        with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as fh:
+            fh.write(textwrap.dedent("""
+                [sources]
+                A=rtsp://h/a
+
+                [app]
+                coco-classes=person,car
+                unknown-brand-idx=7
+            """).lstrip())
+            path = fh.name
+        try:
+            cfg = _main.load_runtime_config(path)
+            self.assertEqual(cfg["unknown_brand_idx"], 7)
+        finally:
+            os.unlink(path)
+
+    def test_unknown_brand_idx_default_is_22(self):
+        import main as _main, tempfile, os, textwrap
+        with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as fh:
+            fh.write(textwrap.dedent("""
+                [sources]
+                A=rtsp://h/a
+
+                [app]
+                coco-classes=person,car
+            """).lstrip())
+            path = fh.name
+        try:
+            cfg = _main.load_runtime_config(path)
+            self.assertEqual(cfg["unknown_brand_idx"], 22)
+        finally:
+            os.unlink(path)
+
     def test_missing_sources_section_raises(self):
         import main as _main
 
@@ -267,6 +302,34 @@ class BoundedQueueTests(unittest.TestCase):
         from gi.repository import Gst
 
         pipeline.set_state(Gst.State.NULL)
+
+
+
+@unittest.skipIf(_find_engine() is None, "no brand engine on disk — skipping")
+class BrandClassifierUnknownMaskTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import main as _main
+        cls.main = _main
+        cls.engine = _find_engine()
+
+    def test_default_mask_idx_excludes_unknown(self):
+        """With unknown_idx=0, predictions must never equal 0."""
+        clf = self.main.BrandClassifier(self.engine, max_batch=4, unknown_idx=0)
+        crops = [np.random.randint(0, 255, (60, 90, 3), dtype=np.uint8)
+                 for _ in range(4)]
+        for _ in range(3):
+            preds = clf.classify(crops)
+            self.assertTrue(all(p != 0 for p in preds),
+                            f"Unknown idx 0 leaked through: {preds}")
+
+    def test_unknown_mask_idx_22(self):
+        clf = self.main.BrandClassifier(self.engine, max_batch=4, unknown_idx=22)
+        crops = [np.random.randint(0, 255, (60, 90, 3), dtype=np.uint8)
+                 for _ in range(4)]
+        preds = clf.classify(crops)
+        self.assertTrue(all(0 <= p < 26 and p != 22 for p in preds),
+                        f"Unknown idx 22 leaked through: {preds}")
 
 
 if __name__ == "__main__":
