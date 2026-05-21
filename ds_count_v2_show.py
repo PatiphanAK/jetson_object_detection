@@ -46,11 +46,11 @@ import pyds
 
 # ── Config ───────────────────────────────────────────────────────
 SOURCES = {
-    "cam-a": "rtsp://10.0.11.37:8554/vdo1",
-    "cam-b": "rtsp://10.0.11.37:8554/vdo2",
-    "cam-c": "rtsp://10.0.11.37:8554/vdo3",
-    "cam-d": "rtsp://10.0.11.37:8554/vdo4",
-    "cam-e": "rtsp://10.0.11.37:8554/vdo5",
+    "cam-a": "rtsp://10.0.11.176:8554/vdo1",
+    "cam-b": "rtsp://10.0.11.176:8554/vdo2",
+    "cam-c": "rtsp://10.0.11.176:8554/vdo3",
+    "cam-d": "rtsp://10.0.11.176:8554/vdo4",
+    "cam-e": "rtsp://10.0.11.176:8554/vdo5",
 }
 INFER_CONFIG = "config_infer_yolov8.txt"
 LOG_CSV = "detect_log.csv"

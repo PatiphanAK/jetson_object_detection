@@ -18,7 +18,6 @@ Run:
     cd /home/pang-1/dev
     python3 ds_count_v2.py
 """
-
 import csv
 import signal
 import sys
@@ -26,10 +25,11 @@ import time
 from collections import defaultdict
 
 import gi
-
 gi.require_version("Gst", "1.0")
-import pyds
 from gi.repository import GLib, Gst
+
+import pyds
+
 
 # ── Config ────────────────────────────────────────────────────────
 SOURCES = {
@@ -42,92 +42,22 @@ SOURCES = {
 INFER_CONFIG = "config_infer_yolov8.txt"
 LOG_CSV = "detect_log.csv"
 REPORT_EVERY_S = 300
-CSV_FLUSH_EVERY_ROWS = 60  # flush to disk every N rows (~2s @ 30fps)
+CSV_FLUSH_EVERY_ROWS = 60        # flush to disk every N rows (~2s @ 30fps)
 
 MUXER_W, MUXER_H = 640, 640
 BATCHED_PUSH_TIMEOUT_US = 40_000  # 40 ms — was 4 s in v1
 
 COCO_CLASSES = [
-    "person",
-    "bicycle",
-    "car",
-    "motorcycle",
-    "airplane",
-    "bus",
-    "train",
-    "truck",
-    "boat",
-    "traffic light",
-    "fire hydrant",
-    "stop sign",
-    "parking meter",
-    "bench",
-    "bird",
-    "cat",
-    "dog",
-    "horse",
-    "sheep",
-    "cow",
-    "elephant",
-    "bear",
-    "zebra",
-    "giraffe",
-    "backpack",
-    "umbrella",
-    "handbag",
-    "tie",
-    "suitcase",
-    "frisbee",
-    "skis",
-    "snowboard",
-    "sports ball",
-    "kite",
-    "baseball bat",
-    "baseball glove",
-    "skateboard",
-    "surfboard",
-    "tennis racket",
-    "bottle",
-    "wine glass",
-    "cup",
-    "fork",
-    "knife",
-    "spoon",
-    "bowl",
-    "banana",
-    "apple",
-    "sandwich",
-    "orange",
-    "broccoli",
-    "carrot",
-    "hot dog",
-    "pizza",
-    "donut",
-    "cake",
-    "chair",
-    "couch",
-    "potted plant",
-    "bed",
-    "dining table",
-    "toilet",
-    "tv",
-    "laptop",
-    "mouse",
-    "remote",
-    "keyboard",
-    "cell phone",
-    "microwave",
-    "oven",
-    "toaster",
-    "sink",
-    "refrigerator",
-    "book",
-    "clock",
-    "vase",
-    "scissors",
-    "teddy bear",
-    "hair drier",
-    "toothbrush",
+    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
+    "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat",
+    "dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack",
+    "umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball",
+    "kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket",
+    "bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple",
+    "sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair",
+    "couch","potted plant","bed","dining table","toilet","tv","laptop","mouse",
+    "remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator",
+    "book","clock","vase","scissors","teddy bear","hair drier","toothbrush",
 ]
 
 
@@ -145,9 +75,10 @@ rows_since_flush = 0
 # Open CSV with line buffering (buffering=1 = newline-flushed)
 csv_file = open(LOG_CSV, "w", newline="", buffering=1)
 csv_writer = csv.writer(csv_file)
-csv_writer.writerow(
-    ["timestamp", "cam", "cam_frame", "class", "confidence", "count_this_frame"]
-)
+csv_writer.writerow([
+    "timestamp", "cam", "cam_frame", "class",
+    "confidence", "count_this_frame"
+])
 
 # Main loop handle (for graceful shutdown)
 g_main_loop = None
@@ -179,7 +110,9 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
             break
 
         src_id = frame_meta.source_id
-        cam_name = cam_names[src_id] if src_id < len(cam_names) else f"src-{src_id}"
+        cam_name = (cam_names[src_id]
+                    if src_id < len(cam_names)
+                    else f"src-{src_id}")
         cam_frame_count[cam_name] += 1
         this_frame = cam_frame_count[cam_name]
 
@@ -195,9 +128,9 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
 
             cid = obj_meta.class_id
             conf = float(obj_meta.confidence)
-            cname = (
-                COCO_CLASSES[cid] if 0 <= cid < len(COCO_CLASSES) else f"class-{cid}"
-            )
+            cname = (COCO_CLASSES[cid]
+                     if 0 <= cid < len(COCO_CLASSES)
+                     else f"class-{cid}")
 
             entry = frame_cls[cname]
             entry["count"] += 1
@@ -213,16 +146,10 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
 
         # Write one CSV row per (frame, class). Confidence = max conf in that frame.
         for cls, info_d in frame_cls.items():
-            csv_writer.writerow(
-                [
-                    ts,
-                    cam_name,
-                    this_frame,
-                    cls,
-                    f"{info_d['max_conf']:.3f}",
-                    info_d["count"],
-                ]
-            )
+            csv_writer.writerow([
+                ts, cam_name, this_frame, cls,
+                f"{info_d['max_conf']:.3f}", info_d["count"]
+            ])
             rows_since_flush += 1
 
         try:
@@ -248,7 +175,8 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
 
 def print_report():
     print("\n" + "=" * 60)
-    print(f"[REPORT] {time.strftime('%Y-%m-%d %H:%M:%S')} | batches={batch_count}")
+    print(f"[REPORT] {time.strftime('%Y-%m-%d %H:%M:%S')} "
+          f"| batches={batch_count}")
     for cam in cam_names:
         n = cam_frame_count[cam]
         counts = total_counts[cam]
@@ -272,8 +200,7 @@ def on_bus_message(bus, message, loop):
         err, dbg = message.parse_error()
         src = message.src.get_name() if message.src else "?"
         print(f"[BUS][ERROR] {src}: {err.message}")
-        if dbg:
-            print(f"          debug: {dbg}")
+        if dbg: print(f"          debug: {dbg}")
         loop.quit()
     elif t == Gst.MessageType.WARNING:
         err, dbg = message.parse_warning()
@@ -308,18 +235,16 @@ def build_pipeline():
         src = Gst.ElementFactory.make("nvurisrcbin", f"src-{i}")
         if src is None:
             # Fallback: nvurisrcbin only available in newer DS; use uridecodebin
-            print(
-                f"[WARN] nvurisrcbin not available, falling back to uridecodebin "
-                f"for {cam_name}"
-            )
+            print(f"[WARN] nvurisrcbin not available, falling back to uridecodebin "
+                  f"for {cam_name}")
             src = Gst.ElementFactory.make("uridecodebin", f"src-{i}")
         src.set_property("uri", url)
         # nvurisrcbin-specific knobs (no-op on uridecodebin fallback)
         try:
-            src.set_property("rtsp-reconnect-interval", 5)  # try every 5s
-            src.set_property("rtsp-reconnect-attempts", -1)  # infinite
-            src.set_property("latency", 200)  # ms jitter buffer
-            src.set_property("select-rtp-protocol", 4)  # 4=TCP only
+            src.set_property("rtsp-reconnect-interval", 5)         # try every 5s
+            src.set_property("rtsp-reconnect-attempts", -1)        # infinite
+            src.set_property("latency", 200)                       # ms jitter buffer
+            src.set_property("select-rtp-protocol", 4)             # 4=TCP only
         except Exception:
             pass
 
@@ -359,7 +284,8 @@ def build_pipeline():
 
     # Probe on nvinfer src pad (skip OSD, save CPU)
     nvinfer_src = nvinfer.get_static_pad("src")
-    nvinfer_src.add_probe(Gst.PadProbeType.BUFFER, infer_src_pad_buffer_probe, 0)
+    nvinfer_src.add_probe(Gst.PadProbeType.BUFFER,
+                          infer_src_pad_buffer_probe, 0)
 
     return pipeline
 
@@ -379,14 +305,11 @@ def main():
     def _sig(*_):
         print("\n[SIG] stopping...")
         g_main_loop.quit()
-
     signal.signal(signal.SIGINT, _sig)
     signal.signal(signal.SIGTERM, _sig)
 
-    print(
-        f"[INFO] Pipeline starting — {len(SOURCES)} cameras, "
-        f"muxer={MUXER_W}x{MUXER_H}, push-timeout={BATCHED_PUSH_TIMEOUT_US}us"
-    )
+    print(f"[INFO] Pipeline starting — {len(SOURCES)} cameras, "
+          f"muxer={MUXER_W}x{MUXER_H}, push-timeout={BATCHED_PUSH_TIMEOUT_US}us")
     print(f"[INFO] Sources: {list(SOURCES.keys())}")
     print(f"[INFO] Logging to {LOG_CSV}, periodic report every {REPORT_EVERY_S}s")
     print(f"[INFO] Ctrl+C to stop\n")
