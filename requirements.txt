@@ -1,10 +1,25 @@
-# Pip dependencies for ds_count_v4_brand.py.
+# Exact pip pins needed by main.py.
 #
-# Install JetPack, CUDA, TensorRT, DeepStream, GStreamer Python bindings,
-# OpenCV, and the matching pyds wheel separately on the Jetson device.
-# Do not put full `pip freeze` output here.
+# Install these with:
+#   pip3 install -r requirements.txt
+#
+# Do not paste the full Jetson `pip freeze` here. Many freeze entries are
+# Ubuntu/JetPack/DeepStream system packages and will fail or install the wrong
+# thing through pip on another Jetson.
 
-numpy==1.19.5; python_version < "3.8"
-numpy>=1.23,<2; python_version >= "3.8"
-
+appdirs==1.4.4
+Mako==1.0.7
+MarkupSafe==1.0
+numpy==1.13.3
+platformdirs==2.4.0
 pycuda==2022.1
+pytools==2022.1.12
+typing-extensions==4.1.1
+
+# Required by main.py, but install from JetPack/DeepStream/apt/matching wheel:
+# tensorrt==8.2.1.8
+# pyds==1.1.1
+# pygobject==3.26.1
+# pycairo==1.16.2
+# OpenCV/cv2 from apt or JetPack, exact version depends on JetPack image.
+# GStreamer/Gst/GLib from apt or DeepStream.
