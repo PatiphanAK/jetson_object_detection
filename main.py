@@ -38,6 +38,8 @@ import gi
 
 gi.require_version("Gst", "1.0")
 import pyds
+
+from car_color import top_color_name
 from gi.repository import GLib, Gst
 
 # ── Config ──────────────────────────────────────────────────────────
@@ -289,7 +291,7 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
     if batch_meta is None:
         return Gst.PadProbeReturn.OK
 
-    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    ts = time.time()  # unix epoch (float seconds)
     l_frame = batch_meta.frame_meta_list
 
     # Per-batch staging for ShuffleNet: list of (row_index, crop_np)
@@ -365,13 +367,14 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
         car_rows_in_this_frame = []
         for cls, info_d in frame_cls.items():
             row = [
-                ts,
-                cam_name,
+                f"{ts:.3f}",
+                src_id,
                 this_frame,
                 cls,
                 f"{info_d['max_conf']:.3f}",
                 info_d["count"],
-                "",
+                "",        # brand_id (back-filled for car rows)
+                "",        # color    (back-filled for car rows)
             ]
             pending_rows.append(row)
             if cls == "car":
@@ -381,24 +384,28 @@ def infer_src_pad_buffer_probe(pad, info, u_data):
         if car_bboxes_this_frame:
             frame_rgb = get_frame_rgb(gst_buffer, frame_meta.batch_id)
             if frame_rgb is not None:
-                # We don't get per-car brand row distinction in CSV (one row per class).
-                # So we'll classify the HIGHEST-confidence car crop only per frame
-                # and put its brand_id in the single 'car' row.
-                # Pick highest conf car bbox
-                # (we don't carry conf here; re-derive from dets)
+                # We classify only the HIGHEST-confidence car crop per frame
+                # (both for brand AND for color) and write into the single
+                # 'car' row of this frame.
                 car_dets = dets[(dets[:, 5].astype(int) == CAR_CLASS_ID)]
-                # sort by confidence desc
                 car_dets = car_dets[np.argsort(-car_dets[:, 4])]
-                # take top crop for this frame
                 top = car_dets[0]
                 crop = crop_clip(frame_rgb, top[0], top[1], top[2], top[3])
                 if crop is not None and crop.size > 0:
                     car_crops.append(crop)
-                    # back-fill ref: the single 'car' row in this frame
                     if car_rows_in_this_frame:
                         car_row_refs.append(car_rows_in_this_frame[0])
                     else:
                         car_row_refs.append(None)
+                    # Color: extract here (synchronous, ~5-10ms on Maxwell CPU).
+                    # crop is RGB; car_color expects BGR -> single cv2.cvtColor.
+                    try:
+                        bgr = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
+                        color_name = top_color_name(bgr) or ""
+                    except Exception:
+                        color_name = ""
+                    if car_rows_in_this_frame and color_name:
+                        car_rows_in_this_frame[0][7] = color_name
 
         try:
             l_frame = l_frame.next
@@ -452,10 +459,11 @@ def print_report():
         elapsed = 0.0
     else:
         elapsed = max(1e-6, now - last_snapshot_t)
-    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    ts_unix = now
+    ts_human = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
 
     print("\n" + "=" * 60)
-    print(f"[REPORT] {ts} | batches={batch_count} | elapsed={elapsed:5.1f}s")
+    print(f"[REPORT] {ts_human} | batches={batch_count} | elapsed={elapsed:5.1f}s")
     for cam in cam_names:
         n = cam_frame_count[cam]
         prev_n = last_snapshot_cam_frames.get(cam, 0)
@@ -469,7 +477,8 @@ def print_report():
             top_s = " ".join(f"{c}={k}" for c, k in top)
             print(f"  {cam:<6} frames={n:>6} fps={fps:5.1f}  {top_s}")
         if fps_writer is not None and elapsed > 0:
-            fps_writer.writerow([ts, cam, delta, f"{fps:.3f}", f"{elapsed:.3f}"])
+            cam_id = cam_names.index(cam) if cam in cam_names else -1
+            fps_writer.writerow([f"{ts_unix:.3f}", cam_id, delta, f"{fps:.3f}", f"{elapsed:.3f}"])
 
     if total_brands:
         top_b = sorted(total_brands.items(), key=lambda x: -x[1])[:8]
@@ -619,19 +628,20 @@ def main():
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(
         [
-            "timestamp",
-            "cam",
+            "ts_unix",
+            "cam_id",
             "cam_frame",
             "class",
             "confidence",
             "count_this_frame",
             "brand_id",
+            "color",
         ]
     )
     global fps_file, fps_writer
     fps_file = open(FPS_LOG, "w", newline="", buffering=1)
     fps_writer = csv.writer(fps_file)
-    fps_writer.writerow(["timestamp", "cam", "frames_delta", "fps", "elapsed_s"])
+    fps_writer.writerow(["ts_unix", "cam_id", "frames_delta", "fps", "elapsed_s"])
 
     pipeline = build_pipeline()
     g_main_loop = GLib.MainLoop()
